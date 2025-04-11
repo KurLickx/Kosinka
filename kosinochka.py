@@ -1,9 +1,10 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QComboBox
 from PyQt5.QtGui import QPainter, QColor, QFont, QPen, QPixmap
-from PyQt5.QtCore import Qt, QRect, QPoint, QTimer
+from PyQt5.QtCore import Qt, QRect, QPoint, QTimer, QPropertyAnimation, QEasingCurve
 import sys
 import random
 import os
+
 
 CARD_WIDTH, CARD_HEIGHT = 80, 120
 SPACING_X = 100
@@ -21,6 +22,7 @@ class Card:
         self.rect = QRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
         self.front_image = QPixmap(os.path.join(ASSETS_PATH, f"{rank}_of_{suit}.png"))
         self.back_image = QPixmap(os.path.join(ASSETS_PATH, "back.png"))
+
 
     def draw(self, painter, x, y):
         self.rect.moveTo(x, y)
@@ -89,11 +91,16 @@ class Solitaire(QWidget):
         self.new_game_button = QPushButton("New Game", self)
         self.new_game_button.setGeometry(800, 60, 100, 30)
         self.new_game_button.clicked.connect(self.reset_game)
+        self.theme_box = QComboBox(self)
+        self.theme_box.setGeometry(800, 100, 120, 30)
+        self.theme_box.addItems(["Green", "Wood", "Blue"])
+        self.theme_box.currentIndexChanged.connect(self.update)
         self.score_timer = QTimer(self)
         self.score_timer.timeout.connect(self.decrease_score)
-        self.score_timer.start(4444)  #league of legends jhin
+        self.score_timer.start(4440)
         self.reset_game()
         self.show()
+
 
     def reset_game(self):
         self.deck = create_deck()
@@ -120,10 +127,19 @@ class Solitaire(QWidget):
         self.score_label.setText(f"Score: {self.score}")
 
 
+    def get_background_image(self):
+        theme = self.theme_box.currentText().lower()
+        file = f"table_{theme}.png"
+        path = os.path.join(ASSETS_PATH, file)
+        if os.path.exists(path):
+            return QPixmap(path)
+        return None
+
+
     def paintEvent(self, event):
         painter = QPainter(self)
-        bg_image = QPixmap(os.path.join(ASSETS_PATH, "table.png"))
-        if not bg_image.isNull():
+        bg_image = self.get_background_image()
+        if bg_image:
             painter.drawPixmap(self.rect(), bg_image)
         else:
             painter.fillRect(self.rect(), QColor(0, 128, 0))
@@ -138,9 +154,7 @@ class Solitaire(QWidget):
         stock_x = MARGIN + 6 * (CARD_WIDTH + 10)
         stock_y = MARGIN
         if self.stock:
-            painter.setBrush(QColor(0, 0, 128))
-            painter.setPen(QPen(Qt.black, 2))
-            painter.drawRect(stock_x, stock_y, CARD_WIDTH, CARD_HEIGHT)
+            painter.drawPixmap(stock_x, stock_y, CARD_WIDTH, CARD_HEIGHT, QPixmap(os.path.join(ASSETS_PATH, "back.png")))
         elif not self.stock and self.waste:
             painter.setBrush(QColor(0, 128, 0))
             painter.setPen(QPen(Qt.white, 2, Qt.DashLine))
@@ -239,8 +253,6 @@ class Solitaire(QWidget):
             self.drag_column = None
             self.update_score()
             self.update()
-
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = Solitaire()
