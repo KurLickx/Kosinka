@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel
-from PyQt5.QtGui import QPainter, QColor, QFont, QPen
-from PyQt5.QtCore import Qt, QRect, QPoint
+from PyQt5.QtGui import QPainter, QColor, QFont, QPen, QPixmap
+from PyQt5.QtCore import Qt, QRect, QPoint, QTimer
 import sys
 import random
-
+import os
 
 CARD_WIDTH, CARD_HEIGHT = 80, 120
 SPACING_X = 100
@@ -11,7 +11,7 @@ SPACING_Y = 30
 MARGIN = 20
 SUITS = ['spades', 'hearts', 'diamonds', 'clubs']
 RANKS = ['A'] + [str(i) for i in range(2, 11)] + ['J', 'Q', 'K']
-
+ASSETS_PATH = 'assets/textures'
 
 class Card:
     def __init__(self, suit, rank, face_up=False):
@@ -19,21 +19,24 @@ class Card:
         self.rank = rank
         self.face_up = face_up
         self.rect = QRect(0, 0, CARD_WIDTH, CARD_HEIGHT)
-
+        self.front_image = QPixmap(os.path.join(ASSETS_PATH, f"{rank}_of_{suit}.png"))
+        self.back_image = QPixmap(os.path.join(ASSETS_PATH, "back.png"))
 
     def draw(self, painter, x, y):
         self.rect.moveTo(x, y)
-        if self.face_up:
-            painter.setBrush(Qt.white)
+        if self.face_up and not self.front_image.isNull():
+            painter.drawPixmap(self.rect, self.front_image)
+        elif not self.face_up and not self.back_image.isNull():
+            painter.drawPixmap(self.rect, self.back_image)
         else:
-            painter.setBrush(QColor(0, 0, 128))
-        painter.setPen(QPen(Qt.black, 2))
-        painter.drawRect(self.rect)
-        if self.face_up:
-            painter.setFont(QFont('Arial', 12))
-            color = Qt.black if self.suit in ['spades', 'clubs'] else Qt.red
-            painter.setPen(QPen(color))
-            painter.drawText(x + 10, y + 25, f'{self.rank} {self.suit[0].upper()}')
+            painter.setBrush(Qt.white if self.face_up else QColor(0, 0, 128))
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawRect(self.rect)
+            if self.face_up:
+                painter.setFont(QFont('Arial', 12))
+                color = Qt.black if self.suit in ['spades', 'clubs'] else Qt.red
+                painter.setPen(QPen(color))
+                painter.drawText(x + 10, y + 25, f'{self.rank} {self.suit[0].upper()}')
 
 
     def can_stack_on(self, other):
@@ -77,18 +80,20 @@ def deal_tableau(deck):
 class Solitaire(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Kosinkus 1.0.3")
+        self.setWindowTitle("Solitaire - Kosynka (PyQt5)")
         self.setGeometry(100, 100, 1024, 768)
         self.score = 0
         self.score_label = QLabel(self)
         self.score_label.setGeometry(800, 20, 200, 30)
-        self.score_label.setFont(QFont('Calibri', 14))                              #Arial? SelfBox?
+        self.score_label.setFont(QFont('Arial', 14))
         self.new_game_button = QPushButton("New Game", self)
         self.new_game_button.setGeometry(800, 60, 100, 30)
         self.new_game_button.clicked.connect(self.reset_game)
+        self.score_timer = QTimer(self)
+        self.score_timer.timeout.connect(self.decrease_score)
+        self.score_timer.start(4444)  #league of legends jhin
         self.reset_game()
         self.show()
-
 
     def reset_game(self):
         self.deck = create_deck()
@@ -106,13 +111,22 @@ class Solitaire(QWidget):
         self.update()
 
 
+    def decrease_score(self):
+        self.score -= 1
+        self.update_score()
+
+
     def update_score(self):
         self.score_label.setText(f"Score: {self.score}")
 
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 128, 0))
+        bg_image = QPixmap(os.path.join(ASSETS_PATH, "table.png"))
+        if not bg_image.isNull():
+            painter.drawPixmap(self.rect(), bg_image)
+        else:
+            painter.fillRect(self.rect(), QColor(0, 128, 0))
         for i in range(4):
             x = MARGIN + i * (CARD_WIDTH + 10)
             y = MARGIN
@@ -151,6 +165,8 @@ class Solitaire(QWidget):
             if self.stock:
                 self.waste.append(self.stock.pop())
                 self.waste[-1].face_up = True
+                self.score += 5
+                self.update_score()
             elif not self.stock and self.waste:
                 self.stock = self.waste[::-1]
                 for card in self.stock:
@@ -175,7 +191,7 @@ class Solitaire(QWidget):
                         self.drag_offset = event.pos() - card.rect.topLeft()
                         self.drag_stack = column[i:]
                         self.tableau[col_index] = column[:i]
-                        return                                                                   #EBAT ROBIT
+                        return
 
 
     def mouseMoveEvent(self, event):
@@ -196,7 +212,7 @@ class Solitaire(QWidget):
                     top_card = foundation[-1] if foundation else None
                     if self.dragging_card.can_move_to_foundation(top_card):
                         foundation.append(self.dragging_card)
-                        self.score += 100
+                        self.score += 10
                         dropped = True
                         break
             if not dropped:
@@ -222,7 +238,8 @@ class Solitaire(QWidget):
             self.drag_stack = []
             self.drag_column = None
             self.update_score()
-            self.update()                                               #Blya kostil
+            self.update()
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
