@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QComboBox
 from PyQt5.QtGui import QPainter, QColor, QFont, QPen, QPixmap
-from PyQt5.QtCore import Qt, QRect, QPoint, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, QRect, QPoint, QTimer, QUrl
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 import sys
 import random
 import os
@@ -13,6 +14,7 @@ MARGIN = 20
 SUITS = ['spades', 'hearts', 'diamonds', 'clubs']
 RANKS = ['A'] + [str(i) for i in range(2, 11)] + ['J', 'Q', 'K']
 ASSETS_PATH = 'assets/textures'
+SOUNDS_PATH = 'assets/sounds'
 
 class Card:
     def __init__(self, suit, rank, face_up=False):
@@ -98,9 +100,18 @@ class Solitaire(QWidget):
         self.score_timer = QTimer(self)
         self.score_timer.timeout.connect(self.decrease_score)
         self.score_timer.start(4440)
+        self.flip_sound = self.init_sound("flip.wav")
+        self.move_sound = self.init_sound("move.wav")
+        self.win_sound = self.init_sound("win.wav")
         self.reset_game()
         self.show()
 
+    def init_sound(self, filename):
+        player = QMediaPlayer()
+        path = os.path.join(SOUNDS_PATH, filename)
+        if os.path.exists(path):
+            player.setMedia(QMediaContent(QUrl.fromLocalFile(path)))
+        return player
 
     def reset_game(self):
         self.deck = create_deck()
@@ -179,8 +190,7 @@ class Solitaire(QWidget):
             if self.stock:
                 self.waste.append(self.stock.pop())
                 self.waste[-1].face_up = True
-                self.score += 5
-                self.update_score()
+                self.flip_sound.play()
             elif not self.stock and self.waste:
                 self.stock = self.waste[::-1]
                 for card in self.stock:
@@ -228,16 +238,25 @@ class Solitaire(QWidget):
                         foundation.append(self.dragging_card)
                         self.score += 10
                         dropped = True
+                        self.move_sound.play()
                         break
             if not dropped:
                 for i, column in enumerate(self.tableau):
                     x = MARGIN + i * SPACING_X
                     y = MARGIN + CARD_HEIGHT + 40 + len(column) * SPACING_Y
                     if QRect(x, y, CARD_WIDTH, CARD_HEIGHT).contains(event.pos()):
-                        if not column or self.drag_stack[0].can_stack_on(column[-1]):
-                            self.tableau[i].extend(self.drag_stack)
-                            dropped = True
-                            break
+                        if column:
+                            if self.drag_stack[0].can_stack_on(column[-1]):
+                                self.tableau[i].extend(self.drag_stack)
+                                dropped = True
+                                self.move_sound.play()
+                                break
+                        else:
+                            if self.drag_stack[0].is_king():
+                                self.tableau[i].extend(self.drag_stack)
+                                dropped = True
+                                self.move_sound.play()
+                                break
             if not dropped:
                 if self.drag_column is not None:
                     self.tableau[self.drag_column].extend(self.drag_stack)
@@ -247,12 +266,13 @@ class Solitaire(QWidget):
                 top = self.tableau[self.drag_column][-1]
                 if not top.face_up:
                     top.face_up = True
-                    self.score += 5
+                    self.flip_sound.play()
             self.dragging_card = None
             self.drag_stack = []
             self.drag_column = None
             self.update_score()
             self.update()
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = Solitaire()
